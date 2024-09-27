@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Queue Render</title>
+    <style>
+        #progress-bar {
+            width: 100%;
+            background-color: #f0f0f0;
+            padding: 3px;
+            border-radius: 3px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, .2);
+        }
+
+        #progress-bar-fill {
+            display: block;
+            height: 22px;
+            background-color: #659cef;
+            border-radius: 3px;
+            transition: width 500ms ease-in-out;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Test Queue Render Endpoint</h2>
+
+    <label for="project-select">Select Project:</label>
+    <select id="project-select">
+        <option value="">--Please choose a project--</option>
+    </select>
+    <button id="fetch-projects">Fetch Projects</button>
+    <button id="set-project">Set Project</button>
+
+    <form action="http://localhost:5000/queue_render" method="post" enctype="multipart/form-data">
+        <label for="name">Project Name:</label>
+        <input type="text" id="name" name="name" required><br><br>
+
+        <label for="front">Front Image:</label>
+        <input type="file" id="front" name="front" accept="image/*" required><br><br>
+
+        <label for="back">Back Image:</label>
+        <input type="file" id="back" name="back" accept="image/*" required><br><br>
+
+        <label for="left">Left Image:</label>
+        <input type="file" id="left" name="left" accept="image/*" required><br><br>
+
+        <label for="right">Right Image:</label>
+        <input type="file" id="right" name="right" accept="image/*" required><br><br>
+
+        <input type="submit" value="Submit">
+    </form>
+
+    <div id="progress-container">
+        <h3>Rendering Progress:</h3>
+        <div id="progress-bar">
+            <span id="progress-bar-fill" style="width: 0%;">
+                <span id="progress-text">0%</span>
+            </span>
+        </div>
+    </div>
+
+    <script>
+        const projectSelect = document.getElementById('project-select');
+        const fetchProjectsButton = document.getElementById('fetch-projects');
+        const setProjectButton = document.getElementById('set-project');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBarFill = document.getElementById('progress-bar-fill');
+        const progressText = document.getElementById('progress-text');
+
+        fetchProjectsButton.addEventListener('click', fetchProjects);
+        setProjectButton.addEventListener('click', setProject);
+
+        function fetchProjects() {
+            fetch('http://localhost:5000/fetch')
+                .then(response => response.json())
+                .then(data => {
+                    projectSelect.innerHTML = '<option value="">--Please choose a project--</option>';
+                    data.projects.forEach(project => {
+                        const option = document.createElement('option');
+                        option.value = project.id;
+                        option.textContent = project.id;
+                        projectSelect.appendChild(option);
+                    });
+                    console.log('Projects fetched:', data);
+                })
+                .catch(error => {
+                    console.error('Error fetching projects:', error);
+                    alert('Error fetching projects: ' + error);
+                });
+        }
+
+        function setProject() {
+            const projectId = projectSelect.value;
+            if (!projectId) {
+                alert('Please select a project');
+                return;
+            }
+
+            fetch('http://localhost:5000/set_project', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ project_id: projectId }),
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Project set:', data);
+                    alert('Project set: ' + data.message);
+                })
+                .catch(error => {
+                    console.error('Error setting project:', error);
+                    alert('Error setting project: ' + error);
+                });
+        }
+
+        document.querySelector('form').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            var formData = new FormData();
+            var projectName = document.getElementById('name').value;
+
+            formData.append('name', projectName);
+
+            var imageTypes = ['front', 'back', 'left', 'right'];
+            imageTypes.forEach(type => {
+                var fileInput = document.getElementById(type);
+                if (fileInput.files.length > 0) {
+                    var file = fileInput.files[0];
+                    var newFileName = `${type}_${projectName}${file.name.substring(file.name.lastIndexOf('.'))}`;
+                    formData.append(type, file, newFileName);
+                }
+            });
+
+            var data = {
+                name: projectName
+            };
+            formData.append('data', JSON.stringify(data));
+
+            fetch(this.action, {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Success:', data);
+                    alert('Response: ' + JSON.stringify(data));
+                    startProgressPolling();
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                    alert('Error: ' + error);
+                });
+        });
+
+        function startProgressPolling() {
+            progressContainer.style.display = 'block';
+            pollProgress();
+        }
+
+        function pollProgress() {
+            fetch('http://localhost:5000/progress')
+                .then(response => response.json())
+                .then(data => {
+                    updateProgressBar(data.progress);
+                    if (data.progress < 100) {
+                        setTimeout(pollProgress, 1000); // Poll every second
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching progress:', error);
+                });
+        }
+
+        function updateProgressBar(progress) {
+            progressBarFill.style.width = `${progress}%`;
+            progressText.textContent = `${progress}%`;
+        }
+    </script>
+</body>
+
+</html>
